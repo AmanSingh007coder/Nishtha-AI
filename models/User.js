@@ -1,7 +1,6 @@
 // models/User.js
 import mongoose from 'mongoose';
 
-// This is the "Building Block" for the resume
 const VerifiedProjectSchema = new mongoose.Schema({
   courseName: {
     type: String,
@@ -12,30 +11,30 @@ const VerifiedProjectSchema = new mongoose.Schema({
     required: true,
   },
   aiFeedback: {
-    type: String, // We'll store the AI's feedback
+    type: String,
   },
-  skills: [String], // e.g., ["React", "Node.js"]
+  skills: [String],
   verifiedAt: {
     type: Date,
     default: Date.now,
   },
+  // --- ADD THESE TWO LINES ---
+  transactionHash: { type: String },
+  tokenId: { type: String },
+  // ---
 });
 
 const UserSchema = new mongoose.Schema({
+  // ... (rest of UserSchema is the same)
   email: {
     type: String,
     required: true,
     unique: true,
   },
-  // We will store all their achievements in an array
   verifiedProjects: [VerifiedProjectSchema], 
-  
-  // We'll also store their wallet address for the NFT
   walletAddress: {
     type: String,
   }
 });
 
-// This is a Mongoose best practice: 
-// It prevents Next.js from recompiling the model every time
 export default mongoose.models.User || mongoose.model('User', UserSchema);

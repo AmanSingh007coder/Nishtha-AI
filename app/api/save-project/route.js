@@ -1,11 +1,23 @@
 // app/api/save-project/route.js
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/dbConnect';
-import User from '@/models/User'; // Import our new User model
+import User from '@/models/User'; // Import our User model
 
 export async function POST(request) {
   const body = await request.json();
-  const { userEmail, courseName, projectBrief, aiFeedback, skills } = body;
+  
+  // --- THIS IS THE FIX ---
+  // We now expect the blockchain data (txHash and tokenID)
+  const { 
+    userEmail, 
+    courseName, 
+    projectBrief, 
+    aiFeedback, 
+    skills,
+    transactionHash, // <-- NEW
+    tokenId          // <-- NEW
+  } = body;
+  // --- END OF FIX ---
 
   if (!userEmail || !projectBrief || !skills) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -20,17 +32,20 @@ export async function POST(request) {
       courseName: courseName,
       projectBrief: projectBrief,
       aiFeedback: aiFeedback,
-      skills: skills, // e.g., ["React", "Node.js"]
+      skills: skills,
+      // --- THIS IS THE FIX ---
+      // We save the blockchain proof to the database
+      transactionHash: transactionHash,
+      tokenId: tokenId,
+      // --- END OF FIX ---
     };
 
     // 3. Find the user and push this new project into their array
-    // We use "upsert: true" which means:
-    // "Find this user and update them" OR "If they don't exist, create them"
     const updatedUser = await User.findOneAndUpdate(
       { email: userEmail },
       { 
         $push: { verifiedProjects: newVerifiedProject },
-        $set: { email: userEmail } // This sets the email on creation
+        $set: { email: userEmail, walletAddress: body.userWalletAddress } // Also save/update wallet address
       },
       { new: true, upsert: true } // 'new: true' returns the updated doc
     );
