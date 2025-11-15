@@ -1,27 +1,89 @@
 "use client"; 
 
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, Fragment } from 'react';
+import { useAuth } from '@/app/context/AuthContext';
+// We need more icons for the new UI
+import { 
+  BeakerIcon, 
+  CodeBracketIcon, 
+  ChatBubbleLeftRightIcon,
+  CheckIcon,
+  ArrowUturnLeftIcon
+} from '@heroicons/react/24/solid';
 
-// --- MODIFICATION ---
-// We now accept currentModuleIndex and setCurrentModuleIndex as props
+/**
+ * NEW: ModalStepper Component
+ * This is a visual guide for the user during multi-stage checkpoints.
+ */
+const ModalStepper = ({ stage }) => {
+  const steps = [
+    { name: 'Quiz', icon: BeakerIcon, stage: 'quiz' },
+    { name: 'Project', icon: CodeBracketIcon, stage: 'project' },
+    { name: 'Interview', icon: ChatBubbleLeftRightIcon, stage: 'interview' }
+  ];
+  // Find which step we're on (0, 1, or 2)
+  const stageIndex = steps.findIndex(s => s.stage === stage);
+
+  return (
+    <nav className="flex items-center justify-center mb-8" aria-label="Progress">
+      {steps.map((step, index) => (
+        // We use Fragment to add the connecting line
+        <Fragment key={step.name}>
+          {/* Connecting Line (don't show before the first step) */}
+          {index > 0 && (
+            <div className={`flex-auto h-1 transition-colors ${
+              index <= stageIndex ? 'bg-blue-500' : 'bg-gray-600'
+            }`} />
+          )}
+          
+          {/* Step Icon and Label */}
+          <div className="relative flex flex-col items-center w-24">
+            <div
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+                index < stageIndex
+                  ? 'bg-green-500' // Completed
+                  : index === stageIndex
+                  ? 'bg-blue-500 ring-4 ring-blue-500/30' // Current
+                  : 'bg-gray-700' // Upcoming
+              }`}
+            >
+              {index < stageIndex ? (
+                <CheckIcon className="w-7 h-7 text-white" />
+              ) : (
+                <step.icon className="w-7 h-7 text-white" />
+              )}
+            </div>
+            <p className={`mt-2 text-sm font-medium ${
+              index <= stageIndex ? 'text-white' : 'text-gray-400'
+            }`}>
+              {step.name}
+            </p>
+          </div>
+        </Fragment>
+      ))}
+    </nav>
+  );
+};
+
+
+/**
+ * Main CoursePlayer Component
+ */
 export default function CoursePlayer({ 
   videoID, 
   modules, 
-  user, 
   courseTitle, 
   currentModuleIndex, 
   setCurrentModuleIndex 
 }) {
-  // --- Player & Modal States ---
-  // const [currentModuleIndex, setCurrentModuleIndex] = useState(0); // <-- This line is REMOVED
   
-  // (The rest of your component's state remains identical)
+  const { user } = useAuth(); // Gets the hardcoded user
   const [showModal, setShowModal] = useState(false);
   const [modalStage, setModalStage] = useState('quiz');
   const [modalData, setModalData] = useState(null); 
   const [modalError, setModalError] = useState('');
   const [isModalLoading, setIsModalLoading] = useState(false);
-  const [loadingStatus, setLoadingStatus] = useState('AI is working...'); 
+  const [loadingStatus, setLoadingStatus] = useState('AI is working...');
   const [player, setPlayer] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -35,32 +97,17 @@ export default function CoursePlayer({
   const [projectReview, setProjectReview] = useState(null);
   const playerInstanceRef = useRef(null);
 
-  // (All of your `useEffect` hooks and functions remain identical)
-  // ... (useEffect for YouTube API) ...
-  // ... (useEffect for Gatekeeper timer) ...
-  // ... (useEffect for Modal open) ...
-  // ... (handleQuizAnswer) ...
-  // ... (handleQuizSubmit) ...
-  // ... (handleProjectSubmit) ...
-  // ... (handleInterviewSubmit) ...
-  // ... (handleModalSuccess) ...
-  // ... (handlePlayPause) ...
-
-  // --- All functions below are copied from your file, unchanged ---
-
-  // This function loads the YouTube IFrame API
+  // (useEffect for YouTube API - Unchanged)
   useEffect(() => {
     if (!videoID) {
       setPlayerError("No video ID provided");
       return;
     }
-    
     const onYouTubeIframeAPIReady = () => {
       console.log("✅ YouTube IFrame API ready!");
       if (playerInstanceRef.current) {
         try { playerInstanceRef.current.destroy(); } catch(e) {}
       }
-      
       const newPlayer = new window.YT.Player('youtube-player-div', {
         height: '100%',
         width: '100%',
@@ -91,7 +138,6 @@ export default function CoursePlayer({
       });
       playerInstanceRef.current = newPlayer;
     };
-
     if (window.YT && window.YT.Player) {
       onYouTubeIframeAPIReady();
     } else {
@@ -103,22 +149,19 @@ export default function CoursePlayer({
       firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
       window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
     }
-    
     return () => {
       window.onYouTubeIframeAPIReady = null;
     };
   }, [videoID]);
 
-  // Gatekeeper timer (checks video progress)
+  // (useEffect for Gatekeeper timer - Unchanged)
   useEffect(() => {
     if (!player || !isPlaying) return;
     const interval = setInterval(() => {
       if (player && typeof player.getCurrentTime === 'function') {
         const time = player.getCurrentTime();
         setCurrentTime(time);
-        
         const currentModule = modules[currentModuleIndex];
-        
         if (time >= currentModule.endTime && !showModal && !isModalLoading) {
           console.log(`Hit gate for ${currentModule.name}! Pausing video.`);
           player.pauseVideo();
@@ -129,20 +172,19 @@ export default function CoursePlayer({
     return () => clearInterval(interval);
   }, [player, isPlaying, currentModuleIndex, showModal, isModalLoading, modules]);
 
-  // This function runs when the modal first opens
+  // (useEffect for Modal open - Unchanged)
   useEffect(() => {
     if (showModal) {
       const currentModule = modules[currentModuleIndex];
-      // Reset all states for the new modal
       setIsModalLoading(false);
       setModalError('');
       setProjectReview(null);
       setVerificationQuestion('');
       setVerificationAnswer('');
+      setGithubRepoUrl('');
       setQuizQuestions(currentModule.quizData || []);
       setCurrentQuizQuestion(0);
       setSelectedAnswer(null);
-      
       if (currentModule.quizData && currentModule.quizData.length > 0) {
         setModalStage('quiz'); 
         setModalData(currentModule.quizData); 
@@ -150,31 +192,42 @@ export default function CoursePlayer({
         setModalStage('project'); 
         setModalData({ brief: currentModule.projectBrief }); 
       } else {
-        handleModalSuccess(); // No quiz/project, just skip
+        handleModalSuccess();
       }
     }
   }, [showModal, currentModuleIndex, modules]);
 
-
-  // --- QUIZ FUNCTIONS ---
+  // (handleQuizAnswer - Unchanged)
   const handleQuizAnswer = (option) => {
     setSelectedAnswer(option);
   };
 
+  /**
+   * NEW: handleReplayModule Function
+   * This closes the modal and seeks the video back to the
+   * beginning of the current module.
+   */
+  const handleReplayModule = () => {
+    if (!player) return;
+    const currentModule = modules[currentModuleIndex];
+    // Seek to the start time of the current module
+    player.seekTo(currentModule.startTime, true);
+    player.playVideo();
+    setShowModal(false);
+  };
+
+  // (handleQuizSubmit - Unchanged)
   const handleQuizSubmit = () => {
     const quizQuestions = modalData; 
     const currentQuestion = quizQuestions[currentQuizQuestion];
-
     if (selectedAnswer === currentQuestion.answer) {
       setModalError('');
       setSelectedAnswer(null);
-      
       if (currentQuizQuestion < quizQuestions.length - 1) {
         setCurrentQuizQuestion(currentQuizQuestion + 1);
       } else {
         console.log("✅ Quiz Passed!");
         const currentModule = modules[currentModuleIndex];
-        
         if (currentModule.projectBrief) {
           setModalStage('project');
           setModalData({ brief: currentModule.projectBrief });
@@ -187,16 +240,13 @@ export default function CoursePlayer({
     }
   };
 
-
-  // --- PROJECT SUBMISSION (The "Master Chain" starts here) ---
+  // (handleProjectSubmit - Unchanged)
   const handleProjectSubmit = async () => {
     const currentModule = modules[currentModuleIndex];
-    
     setIsModalLoading(true);
-    setLoadingStatus("AI is reviewing your code..."); // Set loading message
+    setLoadingStatus("AI is reviewing your code..."); 
     setModalError('');
     try {
-      // --- STEP 1: AI Tech Lead Review ---
       const reviewRes = await fetch('/api/verify-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -207,29 +257,29 @@ export default function CoursePlayer({
       });
       const reviewData = await reviewRes.json();
       if (!reviewRes.ok) throw new Error(reviewData.error || 'Code review failed.');
-      
       if (reviewData.solvesBrief === false) {
         throw new Error(reviewData.feedback || "Your project does not meet the brief's requirements.");
       }
-      
       setProjectReview(reviewData); 
       setVerificationQuestion(reviewData.verificationQuestion);
-      setModalStage('interview'); // Move modal to "interview" step
-
+      setModalStage('interview'); 
     } catch (err) {
       setModalError(err.message); 
     }
     setIsModalLoading(false);
   };
   
-  // --- THIS IS THE FINAL, FULLY-CHAINED FUNCTION ---
+  // (handleInterviewSubmit - Unchanged)
   const handleInterviewSubmit = async () => {
+    if (!user) {
+      setModalError("Auth Error: User not found. Please refresh.");
+      setIsModalLoading(false);
+      return; 
+    }
     const currentModule = modules[currentModuleIndex];
-
     setIsModalLoading(true);
     setModalError('');
     try {
-      // --- STEP 1: AI Interviewer Check ---
       setLoadingStatus("Checking your answer..."); 
       const checkRes = await fetch('/api/check-answer', {
         method: 'POST',
@@ -244,8 +294,6 @@ export default function CoursePlayer({
       if (!checkData.isCorrect) {
         throw new Error("That answer wasn't quite right. Please try again.");
       }
-
-      // --- STEP 2: Mint Blockchain NFT (WE DO THIS *BEFORE* SAVING) ---
       setLoadingStatus("Answer correct! Minting your 'Proof-of-Skill' NFT...");
       const mintRes = await fetch('/api/mint-nft', {
         method: 'POST',
@@ -258,52 +306,43 @@ export default function CoursePlayer({
       });
       const mintData = await mintRes.json();
       if (!mintData.success) {
-        // This is a "critical" error. If minting fails, we stop.
         throw new Error(`NFT minting failed: ${mintData.error || 'Unknown reason'}`);
       }
-      
       alert(`Success! NFT (ID: ${mintData.tokenId}) minted to your wallet!`);
-
-      // --- STEP 3: Save to Database (NOW WITH THE PROOF) ---
       setLoadingStatus("NFT minted! Saving project to your profile...");
       const saveRes = await fetch('/api/save-project', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userEmail: user.email, 
+          userEmail: user.email,
           userWalletAddress: user.walletAddress,
           courseName: courseTitle,
           projectBrief: currentModule.projectBrief,
           aiFeedback: projectReview.feedback,
-          skills: ["JavaScript", "HTML", "CSS"], // TODO: Get this from AI
-          transactionHash: mintData.transactionHash, // <-- WE SAVE THE PROOF
-          tokenId: mintData.tokenId                 // <-- WE SAVE THE PROOF
+          skills: ["JavaScript", "HTML", "CSS"],
+          transactionHash: mintData.transactionHash,
+          tokenId: mintData.tokenId 
         })
       });
       const saveData = await saveRes.json();
       if (!saveData.success) throw new Error("Failed to save your project to the database.");
-
-      // --- STEP 4: All successful! Unlock and continue. ---
       handleModalSuccess();
-
     } catch (err) {
       console.error(err);
-      setModalError(err.message); // This will show any error in the chain
+      setModalError(err.message); 
     }
     setIsModalLoading(false);
   };
   
-  // This function is ONLY called when a module is 100% complete
+  // (handleModalSuccess - Unchanged)
   const handleModalSuccess = () => {
     console.log("Module passed! Unlocking next chapter.");
     setShowModal(false);
     setIsModalLoading(false);
-    
     const nextIndex = currentModuleIndex + 1;
     if (nextIndex < modules.length) {
-      setCurrentModuleIndex(nextIndex); // <-- Uses the prop setter
+      setCurrentModuleIndex(nextIndex); 
       const nextModuleStartTime = modules[nextIndex].startTime;
-      
       if (player && player.seekTo) {
         player.seekTo(nextModuleStartTime, true);
         player.playVideo();
@@ -313,6 +352,7 @@ export default function CoursePlayer({
     }
   };
 
+  // (handlePlayPause - Unchanged)
   const handlePlayPause = () => {
     if (!player) return;
     try {
@@ -323,13 +363,12 @@ export default function CoursePlayer({
     }
   };
 
-  // --- THIS IS THE JSX (THE HTML) ---
-  // (This is copied from your file, unchanged)
+  // --- JSX Below (Fully Updated) ---
   return (
     <div className="w-full">
+      {/* Player (Unchanged) */}
       <div className="aspect-video rounded-lg overflow-hidden shadow-2xl bg-black relative">
         <div id="youtube-player-div" className="w-full h-full"></div>
-        
         {playerError && (
           <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90 text-white p-8">
             <div className="text-center">
@@ -344,7 +383,6 @@ export default function CoursePlayer({
             </div>
           </div>
         )}
-        
         {!player && !playerError && (
           <div className="absolute inset-0 flex items-center justify-center bg-black">
             <div className="text-center text-white">
@@ -355,7 +393,7 @@ export default function CoursePlayer({
         )}
       </div>
       
-      {/* Play/Pause and Status box UI */}
+      {/* Player Controls (Unchanged) */}
       <div className="mt-4 space-y-3">
         <div className="flex justify-center gap-4">
           <button
@@ -375,23 +413,29 @@ export default function CoursePlayer({
         </div>
       </div>
 
-      {/* --- The New, Multi-Stage Modal --- */}
+      {/* --- The NEWLY STYLED Multi-Stage Modal --- */}
       {showModal && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80"
-          onClick={isModalLoading ? () => {} : () => setShowModal(false)}
+          onClick={() => {}} // Prevents closing on backdrop click
         >
           <div 
-            className="bg-gray-800 w-full max-w-lg m-4 p-6 rounded-2xl shadow-2xl border border-gray-700"
-            onClick={(e) => e.stopPropagation()}
+            className="bg-gray-800 bg-opacity-70 backdrop-blur-lg border border-gray-700/50 w-full max-w-2xl m-4 p-8 rounded-2xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()} 
           >
             {/* Modal Header */}
-            <div className="mb-4">
-              <h2 className="text-2xl font-bold text-white">Checkpoint!</h2>
-              <p className="text-gray-400">
+            <div className="mb-4 text-center">
+              <h2 className="text-3xl font-bold text-white">Checkpoint!</h2>
+              <p className="text-gray-300">
                 You've reached the end of "{modules[currentModuleIndex].name}".
               </p>
             </div>
+
+            {/* NEW: Conditional Stepper */}
+            {/* This only shows if it's a multi-stage (project) module */}
+            {modules[currentModuleIndex].projectBrief && (
+              <ModalStepper stage={modalStage} />
+            )}
 
             {/* Modal Content */}
             <div className="py-4 min-h-[200px] text-gray-200">
@@ -412,29 +456,45 @@ export default function CoursePlayer({
               {/* --- STAGE 1: QUIZ --- */}
               {modalStage === 'quiz' && !isModalLoading && (
                 <div className="flex flex-col gap-4">
-                  <h3 className="font-bold text-lg">Knowledge Check!</h3>
+                  <h3 className="font-bold text-xl text-center mb-4 text-white">
+                    <BeakerIcon className="w-6 h-6 inline-block mr-2 text-blue-400" />
+                    Knowledge Check
+                  </h3>
                   {modalData && modalData.length > 0 ? (
                     <>
-                      <p className="text-gray-200">
+                      <p className="text-gray-200 text-lg text-center">
                         Question {currentQuizQuestion + 1} of {modalData.length}:<br/>
-                        {modalData[currentQuizQuestion].question}
+                        <span className="font-semibold">{modalData[currentQuizQuestion].question}</span>
                       </p>
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-3 mt-4">
                         {modalData[currentQuizQuestion].options.map((opt, i) => (
                           <button 
                             key={i} 
                             onClick={() => handleQuizAnswer(opt)}
-                            className={`w-full p-3 text-left rounded-lg transition-colors ${selectedAnswer === opt ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'}`}
+                            className={`w-full p-4 text-left rounded-lg transition-all transform hover:scale-[1.02] ${
+                              selectedAnswer === opt 
+                                ? 'bg-blue-600 ring-2 ring-blue-400' 
+                                : 'bg-gray-700 hover:bg-gray-600'
+                            }`}
                           >
                             {opt}
                           </button>
                         ))}
                       </div>
-                      <div className="flex justify-end pt-4 border-t border-gray-700">
+                      
+                      {/* NEW: Button container with Replay button */}
+                      <div className="flex justify-between items-center pt-6 border-t border-gray-700 mt-6">
+                        <button
+                          onClick={handleReplayModule}
+                          className="px-6 py-2 bg-gray-600 text-white font-medium rounded-lg shadow-lg hover:bg-gray-700 transition-colors flex items-center"
+                        >
+                          <ArrowUturnLeftIcon className="w-5 h-5 mr-2" />
+                          Replay Chapter
+                        </button>
                         <button
                           onClick={handleQuizSubmit}
                           disabled={!selectedAnswer}
-                          className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-lg hover:bg-blue-700 disabled:bg-gray-500"
+                          className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-lg hover:bg-blue-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
                         >
                           Submit Answer
                         </button>
@@ -449,21 +509,25 @@ export default function CoursePlayer({
               {/* --- STAGE 2: PROJECT --- */}
               {modalStage === 'project' && !isModalLoading && (
                 <div className="flex flex-col gap-4">
-                  <h3 className="font-bold text-lg">Project Time!</h3>
-                  <p>{modalData?.brief}</p>
-                  <label htmlFor="githubRepoUrl" className="block text-sm font-medium mb-1 mt-4">Submit your GitHub Repo URL:</label>
+                  <h3 className="font-bold text-xl text-center mb-4 text-white">
+                    <CodeBracketIcon className="w-6 h-6 inline-block mr-2 text-blue-400" />
+                    Project Submission
+                  </h3>
+                  <p className="text-center text-lg">{modalData?.brief}</p>
+                  
+                  <label htmlFor="githubRepoUrl" className="block text-sm font-medium mb-1 mt-4 text-gray-300">Submit your GitHub Repo URL:</label>
                   <input
                     type="text"
                     id="githubRepoUrl"
                     value={githubRepoUrl}
                     onChange={(e) => setGithubRepoUrl(e.target.value)}
                     placeholder="https://github.com/your-name/repo/tree/main/folder"
-                    className="w-full p-2 rounded bg-gray-700 text-white"
+                    className="w-full p-3 rounded bg-gray-900/80 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <button
                     onClick={handleProjectSubmit}
                     disabled={isModalLoading}
-                    className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-lg hover:bg-blue-700 transition-colors disabled:bg-gray-600"
+                    className="px-6 py-3 mt-4 bg-blue-600 text-white font-bold rounded-lg shadow-lg hover:bg-blue-700 transition-colors disabled:bg-gray-600"
                   >
                     Submit for AI Review
                   </button>
@@ -473,24 +537,27 @@ export default function CoursePlayer({
               {/* --- STAGE 3: INTERVIEW --- */}
               {modalStage === 'interview' && !isModalLoading && (
                 <div className="flex flex-col gap-4">
-                  <h3 className="font-bold text-lg">Verification!</h3>
-                  <p className="text-gray-300">Your code has been reviewed (Score: {projectReview?.qualityScore}/10). To prove you wrote it, please answer this question:</p>
-                  <p className="p-3 bg-gray-700 rounded-md italic">"{verificationQuestion}"</p>
+                  <h3 className="font-bold text-xl text-center mb-4 text-white">
+                    <ChatBubbleLeftRightIcon className="w-6 h-6 inline-block mr-2 text-blue-400" />
+                    AI Verification
+                  </h3>
+                  <p className="text-gray-300 text-center text-lg">Your code has been reviewed (Score: {projectReview?.qualityScore}/10). To prove you wrote it, please answer this question:</p>
+                  <p className="p-4 bg-gray-900/80 rounded-md italic text-center text-white">"{verificationQuestion}"</p>
                   
-                  <label htmlFor="verificationAnswer" className="block text-sm font-medium mb-1 mt-4">Your Answer:</label>
+                  <label htmlFor="verificationAnswer" className="block text-sm font-medium mb-1 mt-4 text-gray-300">Your Answer:</label>
                   <textarea
                     id="verificationAnswer"
                     value={verificationAnswer}
                     onChange={(e) => setVerificationAnswer(e.target.value)}
-                    className="w-full p-2 rounded bg-gray-700 text-white"
-                    rows={3}
+                    className="w-full p-3 rounded bg-gray-900/80 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={4}
                   />
                   <button
                     onClick={handleInterviewSubmit}
                     disabled={isModalLoading}
-                    className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg shadow-lg hover:bg-green-700 transition-colors disabled:bg-gray-600"
+                    className="px-6 py-3 mt-4 bg-green-600 text-white font-bold rounded-lg shadow-lg hover:bg-green-700 transition-colors disabled:bg-gray-600"
                   >
-                    Submit Answer
+                    Submit & Claim Certificate
                   </button>
                 </div>
               )}

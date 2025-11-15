@@ -4,63 +4,71 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import CertificateCard from '@/components/CertificateCard';
 import ResumeDisplay from '@/components/ResumeDisplay';
+import Link from 'next/link';
+import { AcademicCapIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+
+  const { user, isAuthLoading } = useAuth();
+
   const [profile, setProfile] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [error, setError] = useState('');
-  
-  // State to toggle between views
   const [showResume, setShowResume] = useState(false);
 
   useEffect(() => {
     if (!user) {
-      setIsLoading(false);
-      return; // Wait for user to be available
+      setIsProfileLoading(false);
+      return;
     }
 
     const fetchProfile = async () => {
-      setIsLoading(true);
-      setError('');
+      setIsProfileLoading(true);
       try {
         const response = await fetch('/api/get-my-profile', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userEmail: user.email }),
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error);
-        
-        setProfile(data.user);
 
+        if (!response.ok) {
+          if (response.status === 404) setProfile(null);
+          else {
+            const data = await response.json();
+            throw new Error(data.error || "Failed to fetch profile");
+          }
+        } else {
+          const data = await response.json();
+          setProfile(data.user);
+        }
       } catch (err) {
-        console.error(err);
         setError(err.message);
       } finally {
-        setIsLoading(false);
+        setIsProfileLoading(false);
       }
     };
 
     fetchProfile();
-  }, [user]); // Re-fetch when user logs in
+  }, [user]);
 
-  if (isLoading) {
+  // Spinners / Errors
+  if (isAuthLoading || (isProfileLoading && user)) {
     return (
       <div className="flex justify-center items-center h-screen -mt-16">
-        <p className="text-lg">Loading profile...</p>
+        <div className="text-gray-400 text-xl animate-pulse">Loading Dashboard...</div>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="flex justify-center items-center h-screen -mt-16">
-        <p className="text-2xl">Please connect your wallet to view your dashboard.</p>
+      <div className="flex flex-col justify-center items-center h-screen -mt-16">
+        <p className="text-2xl text-white mb-3">Please log in to view your dashboard.</p>
+        <p className="text-gray-500">Use the Login button in the header.</p>
       </div>
     );
   }
-  
+
   if (error) {
     return (
       <div className="flex justify-center items-center h-screen -mt-16">
@@ -71,57 +79,79 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto max-w-6xl p-8">
+
+      {/* ----------------- RESUME VIEW ----------------- */}
       {showResume ? (
-        // --- RESUME VIEW ---
         <section>
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-4xl font-bold">My Living Resume</h1>
+          <div className="flex justify-between items-center mb-8">
+            <h1 className="text-4xl font-bold text-white">My Living Resume</h1>
             <button
               onClick={() => setShowResume(false)}
-              className="px-4 py-2 bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-600 transition-colors"
+              className="px-4 py-2 bg-gray-800 border border-gray-700 text-white rounded-lg hover:bg-gray-700 transition"
             >
-              &larr; Back to Dashboard
+              ← Back
             </button>
           </div>
-          <ResumeDisplay userEmail={user.email} />
-        </section>
 
+          <div className="bg-gray-900 border border-gray-800 p-6 rounded-xl shadow-xl">
+            <ResumeDisplay userEmail={user.email} />
+          </div>
+        </section>
       ) : (
-        // --- DEFAULT DASHBOARD VIEW ---
+
         <>
-          <section id="certificates">
-            <h1 className="text-4xl font-bold mb-6">My Certificates</h1>
-            {profile && profile.verifiedProjects && profile.verifiedProjects.length > 0 ? (
+          {/* ----------------- CERTIFICATES SECTION ----------------- */}
+          <section>
+            <h1 className="text-4xl font-bold mb-6 text-white">My Certificates</h1>
+
+            {profile?.verifiedProjects?.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {profile.verifiedProjects.map(project => (
-                  <CertificateCard key={project._id || project.transactionHash} project={project} />
+                  <CertificateCard key={project._id} project={project} />
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center p-12 bg-gray-800 rounded-lg">
-                <p className="text-xl text-gray-400">You haven't earned any verified certificates yet.</p>
-                <Link href="/" className="mt-4 px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">
-                  Start a new course
+              <div className="p-12 bg-gray-900 border border-gray-800 rounded-xl text-center">
+                <AcademicCapIcon className="w-16 h-16 text-blue-500 mx-auto mb-5" />
+                <h3 className="text-2xl font-semibold text-white mb-2">No Certificates Yet</h3>
+                <p className="text-gray-400 mb-6">
+                  Complete your first course to unlock AI-verified certificates.
+                </p>
+
+                <Link
+                  href="/"
+                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg shadow hover:scale-105 transition"
+                >
+                  Start a Course
                 </Link>
               </div>
             )}
           </section>
 
-          <hr className="my-12 border-gray-700" />
+          <hr className="my-12 border-gray-800" />
 
-          <section id="resume">
-            <h2 className="text-4xl font-bold mb-6">My Resume</h2>
-            <div className="p-8 bg-gray-800 rounded-lg flex flex-col md:flex-row items-center justify-between gap-6">
-              <div>
-                <h3 className="text-2xl font-semibold">Ready for your next role?</h3>
-                <p className="text-gray-400 mt-2">Generate a "Living Resume" powered by AI, complete with all your on-chain verified skills and projects.</p>
+          {/* ----------------- RESUME CARD ----------------- */}
+          <section>
+            <h2 className="text-4xl font-bold mb-6 text-white">My Resume</h2>
+
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 flex flex-col md:flex-row justify-between items-center gap-6 shadow-xl">
+
+              <div className="flex items-center">
+                <DocumentTextIcon className="w-16 h-16 text-purple-400 mr-6" />
+                <div>
+                  <h3 className="text-2xl font-semibold text-white">Build your AI Resume</h3>
+                  <p className="text-gray-400 mt-2">
+                    Auto-generate a verified resume using your completed certificates & on-chain data.
+                  </p>
+                </div>
               </div>
+
               <button
                 onClick={() => setShowResume(true)}
-                disabled={!profile || !profile.verifiedProjects || profile.verifiedProjects.length === 0}
-                className="px-8 py-4 bg-green-600 text-white font-bold rounded-lg shadow-lg hover:bg-green-700 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                disabled={!profile?.verifiedProjects?.length}
+                className="px-8 py-4 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition disabled:bg-gray-700 disabled:cursor-not-allowed"
               >
-                Generate My AI Resume
+                Generate Resume
               </button>
             </div>
           </section>

@@ -1,29 +1,29 @@
 "use client";
 
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext } from 'react';
 
-// --- THIS IS THE FAKE USER DATA ---
-// 1. Use the same email from your test files ("test@user.com")
-// 2. PASTE YOUR METAMASK PUBLIC ADDRESS HERE
-const FAKE_USER = {
-  email: "test@user.com",
+// --- THIS IS YOUR FAKE USER ---
+// 1. Use the email from your tests
+// 2. Use your MetaMask wallet address
+const HARDCODED_USER = {
+  email: "amansinghrajput1610@gmail.com",
   walletAddress: "0x47995c6be3d4a21745356fab0706c18470959723" // <-- PASTE YOUR ADDRESS
 };
-// ------------------------------------
+// ---------------------------------
 
+// Create the context
 const AuthContext = createContext(null);
 
+// Create the provider component
 export const AuthProvider = ({ children }) => {
-  // The user is now "logged in" by default with your fake data
-  const [user, setUser] = useState(FAKE_USER);
-
-  // The connectWallet function does nothing, but we keep it
-  // so the rest of the app doesn't break if it tries to call it.
-  const connectWallet = async () => {
-    console.log("Using fake user. No connection needed.");
+  
+  // The value is now static.
+  // The user is ALWAYS logged in.
+  // The app is NEVER loading.
+  const value = {
+    user: HARDCODED_USER,
+    isAuthLoading: false 
   };
-
-  const value = { user, connectWallet };
 
   return (
     <AuthContext.Provider value={value}>
@@ -32,6 +32,7 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
+// Create the hook
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
