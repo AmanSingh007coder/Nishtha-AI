@@ -1,24 +1,23 @@
-// app/api/generate-quiz/route.js
 import { NextResponse } from 'next/server';
-// 1. Import from the NEW library
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from '@google/genai';
+import { YouTubeTranscript } from 'youtube-transcript'; // We need this here now
 
-// 2. Initialize with the NEW syntax
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-const superPrompt = `
-  You are an expert technical educator. I am providing you with a YouTube video.
-  Your job is to do two things:
+// This is a new, focused prompt for this API
+const quizzerPrompt = `
+  You are an expert quiz creator. I am providing you with a short transcript
+  from a specific module of a video course.
+
+  Based ONLY on the "MODULE TRANSCRIPT" below, generate an array of 3
+  multiple-choice questions.
   
-  1.  First, accurately transcribe the *entire* video. The audio may be in "Hinglish" or contain "fluff" (like 'like and subscribe').
-  2.  Second, after you have the full transcript, you must **IGNORE all fluff** and focus *only* on the core technical concepts.
-  
-  Based *only* on those technical concepts, generate a 5-question multiple-choice quiz.
-  Return your response as a single, valid JSON object.
-  
-  The JSON format MUST be:
+  - Questions must be about specific concepts from the text.
+  - Do not ask generic questions.
+  - The "options" array must have 4 items.
+
+  Respond ONLY with a single, valid JSON object in this format:
   {
-    "fullTranscript": "The full, word-for-word transcript of the video...",
     "quiz": [
       {
         "question": "What is the purpose of the useEffect hook?",
@@ -28,48 +27,71 @@ const superPrompt = `
       { "question": "...", "options": [...], "answer": "..." }
     ]
   }
+
+  MODULE TRANSCRIPT:
 `;
 
 export async function POST(request) {
-  const body = await request.json();
-  const { videoURL } = body;
+  const body = await request.json();
+  // 1. We now expect startTime and endTime from the frontend
+  const { videoURL, startTime, endTime } = body;
 
-  if (!videoURL) {
-    return NextResponse.json({ error: 'videoURL is required' }, { status: 400 });
-  }
+  if (!videoURL || startTime === undefined || endTime === undefined) {
+    return NextResponse.json({ error: 'videoURL, startTime, and endTime are required' }, { status: 400 });
+  }
 
-  try {
-    // --- THIS IS THE CORRECTED CODE ---
-    // We call ai.models.generateContent directly
-    // We use 'gemini-1.5-flash' which is the stable 1M token model.
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      safetySettings: [
-        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-      ],
-      contents: [
-        {
-          parts: [
-            { fileData: { mimeType: 'video/youtube', fileUri: videoURL } },
-            { text: superPrompt }
-          ]
-        }
-      ]
-    });
-    // --- END OF CORRECTED CODE ---
+  let aiResponseText; // For debugging
+
+  try {
+    // 2. Fetch the FULL transcript
+    console.log(`Quizzer: Fetching transcript for ${videoURL}`);
+    const fullTranscript = await YouTubeTranscript.fetchTranscript(videoURL);
+
+    if (!fullTranscript || fullTranscript.length === 0) {
+      return NextResponse.json({ error: 'Could not fetch transcript' }, { status: 404 });
+    }
+
+    // 3. "Slice" the transcript to get ONLY this module's text
+    const moduleTranscript = fullTranscript
+      .filter(item => item.offset >= startTime && item.offset <= endTime)
+      .map(item => item.text)
+      .join(' ');
     
-    // The AI's response will be the JSON string
-    // We use response.text (a property), NOT response.text() (a method)
-    const aiResponseText = response.text.replace(/```json|```/g, '').trim();
-    const aiJSON = JSON.parse(aiResponseText);
-    
-    return NextResponse.json(aiJSON);
+    if (moduleTranscript.length === 0) {
+      return NextResponse.json({ error: 'No transcript text found for this time range.' }, { status: 400 });
+    }
 
-  } catch (error) {
-    console.error("AI Error:", error);
-    return NextResponse.json({ error: `Failed to process video: ${error.message}` }, { status: 500 });
-  }
+    console.log(`Quizzer: Sliced transcript. Length: ${moduleTranscript.length}. Calling Flash model.`);
+
+    // 4. Create the final prompt
+    const finalPrompt = `${quizzerPrompt}\n${moduleTranscript}`;
+
+    // 5. Call the FAST model (gemini-1.5-flash)
+  	const response = await ai.models.generateContent({
+      model: 'gemini-1.5-flash-latest',
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
+      contents: [
+        { parts: [ { text: finalPrompt } ] }
+      ]
+  	});
+    
+  	aiResponseText = response.text.replace(/```json|```/g, '').trim();
+  	const aiJSON = JSON.parse(aiResponseText);
+  	
+    // 6. Return the quiz data
+  	return NextResponse.json(aiJSON); // This will be { "quiz": [...] }
+
+  } catch (error) {
+    console.error("AI Error:", error);
+    if (error.name === 'SyntaxError') {
+	  console.error("--- AI FAILED TO RETURN JSON ---", aiResponseText);
+	  return NextResponse.json({ error: 'Quizzer AI failed to return valid JSON.', details: aiResponseText }, { status: 500 });
+	}
+    return NextResponse.json({ error: `Failed to process video: ${error.message}` }, { status: 500 });
+  }
 }

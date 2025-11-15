@@ -6,7 +6,7 @@ import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from '@google/genai';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// This is the "Super-Prompt" for your AI Career Coach
+// --- THIS IS THE UPDATED PROMPT ---
 const resumePrompt = `
   You are a professional career coach and expert resume writer.
   A developer has provided you with their user data and a list of AI-VERIFIED projects.
@@ -14,10 +14,10 @@ const resumePrompt = `
   Your task is to generate a complete, professional resume in the standard "JSON Resume" format.
 
   RULES:
-  1.  Generate a powerful, professional "summary" based on their skills.
+  1.  Generate a powerful, professional "summary".
   2.  List *all* their verified projects under the "projects" section.
   3.  For each project, use the "courseName" as the "name", "projectBrief" as the "summary", and a list of "highlights".
-  4.  The "highlights" array MUST include the "aiFeedback" and the "transactionHash".
+  4.  The "highlights" array MUST include the "aiFeedback" and the "transactionHash" (if it exists).
   5.  Aggregate all unique "skills" into the "skills" section.
   6.  The "skills" section MUST be an array of objects, like this:
       { "name": "AI-Verified Skills", "level": "Proficient", "keywords": ["React", "Node.js", "MongoDB", "Blockchain"] }
@@ -56,7 +56,10 @@ export async function POST(request) {
         }
         if (p.transactionHash) {
           highlights.push(`View Proof: https://sepolia.etherscan.io/tx/${p.transactionHash}`);
+        } else {
+          highlights.push("(On-chain verification pending for this project)");
         }
+
         return {
           name: p.courseName || "Verified Project",
           summary: p.projectBrief || "Completed a verified project.",
@@ -75,6 +78,8 @@ export async function POST(request) {
     
     const fullPrompt = `${resumePrompt} \n ${JSON.stringify(userData, null, 2)}`;
     
+    // --- THIS IS THE FINAL, CORRECTED SYNTAX ---
+    // We are using the correct ai.models.generateContent call
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       safetySettings: [
@@ -85,6 +90,7 @@ export async function POST(request) {
       ],
       contents: [{ parts: [{ text: fullPrompt }] }]
     });
+    // --- END OF FIX ---
 
     const aiResponseText = response.text.replace(/```json|```/g, '').trim();
     const aiJSON = JSON.parse(aiResponseText);

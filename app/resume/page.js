@@ -6,7 +6,7 @@ import CV from 'react-cv'; // The library we just installed
 
 // This is a FAKE user for the demo.
 // This MUST match the email you used in "Test 4"
-const FAKE_USER_EMAIL = "test@user.com"; 
+const FAKE_USER_EMAIL = "amansinghrajput1610@gmail.com"; 
 
 export default function ResumePage() {
   const [resumeData, setResumeData] = useState(null);

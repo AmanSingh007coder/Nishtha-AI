@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/dbConnect';
 import Course from '@/models/Course';
-// 1. Use the modern, correct SDK
+// We are using the standard Google AI SDK
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from '@google/genai';
-// 2. Use the 'youtube-transcript' library
-import { YoutubeTranscript } from 'youtube-transcript'; 
 
 // Initialize the AI
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -23,45 +21,45 @@ function extractVideoID(url) {
   }
 }
 
-// 3. This is the robust prompt that uses timestamps
-// and only asks for projects on long modules.
+// This is the strict, single-call prompt for short videos.
 const coursePlannerPrompt = `
-  You are an expert curriculum designer. I am providing you with a full YouTube video transcript.
-  The transcript is formatted with (Time: Xm Ys) markers.
+You are an expert curriculum designer. I am providing you with a full YouTube video transcript (approx. 1 hour).
+Your job is to analyze the video's content and structure it into a 6-module, gated learning path.
 
-  YOUR JOB:
-  1.  Analyze this transcript and divide it into 3-5 logical "Modules".
-  2.  You MUST use the (Time: Xm Ys) markers to determine the "startTime" and "endTime" for each module.
-  3.  You must return these times in *total seconds*. For example, (Time: 2m 30s) would be a startTime of 150.
-  4.  You must **IGNORE ALL 'fluff'** (like 'like and subscribe', sponsor messages, intros, and off-topic stories).
+**CRITICAL RULES:**
+1.  **Strict Adherence:** The final JSON MUST contain **EXACTLY 6** module objects.
+2.  **Hinglish Filter:** You must accurately understand the content, regardless of mixed languages (Hinglish), but all output must be in clear English.
+3.  **Fluff Filter:** IGNORE ALL 'fluff' (intros, 'like and subscribe', sponsor messages, etc.).
+4.  **Sequential EndTimes:** EndTime of Module N MUST be the StartTime of Module N+1.
 
-  RULES FOR *EACH* MODULE:
-  
-  5.  **QUIZ RULE:** The 3 questions in 'quizData' MUST be answerable *only* by using the transcript content *between* that module's specific 'startTime' and 'endTime'. The questions must be about the specific code or concepts taught *in that section*, not general knowledge.
+**MODULE DESIGN (Structure by Type):**
+- **Module 1 (Quiz):** Covers setup, variables, and basic data types.
+- **Module 2 (Quiz):** Covers operators and control flow (if/else).
+- **Module 3 (Project):** A small project/checkpoint covering Modules 1 & 2.
+- **Module 4 (Quiz):** Covers functions, arrays, and objects.
+- **Module 5 (Project):** The final capstone project covering ALL concepts from Modules 1 through 4.
+- **Module 6 (Complete):** The final, empty module marking the course end.
 
-  6.  **PROJECT RULE:** The 'projectBrief' MUST be 'null' if the module's duration (endTime - startTime) is less than 600 seconds (10 minutes). Do not assign projects for short modules. If the module is over 10 minutes, write a 2-3 sentence "Mini-Capstone" project brief.
+**RULES FOR FIELDS:**
+- **For 'quiz' modules:** 'quizData' MUST contain 3 questions (with options and an answer). 'projectBrief' MUST be **null**.
+- **For 'project' modules:** 'quizData' MUST be an empty array **[]**. 'projectBrief' MUST be a 2-3 sentence project idea based on the completed concepts.
+- **For Module 6:** 'quizData' MUST be **[]** and 'projectBrief' MUST be **null**.
 
-  You must respond ONLY with a single, valid JSON object in this format: 
-  { 
-	"courseTitle": "A good title for the course",
-	"modules": [ 
-	  {
-		"name": "...", 
-		"startTime": 0, 
-		"endTime": 600, 
-		"quizData": [ ...quiz questions... ], 
-		"projectBrief": "Build a small project..." 
-	  },
-      {
-		"name": "...", 
-		"startTime": 600, 
-		"endTime": 1200, 
-		"quizData": [ ...quiz questions... ], 
-		"projectBrief": null
-	  }
-	] 
-  }
-  Do not write any other text or markdown.
+You must estimate the start and end times in seconds (e.g., 900 seconds for 15:00) based on the video length.
+
+You must respond ONLY with a single, valid JSON object in this format: 
+{ 
+  "courseTitle": "A professional title derived from the video topic",
+  "modules": [ 
+    { "name": "Module 1: [Concept]", "startTime": 0, "endTime": 900, "type": "quiz", "quizData": [ ... ], "projectBrief": null },
+    { "name": "Module 2: [Concept]", "startTime": 900, "endTime": 1800, "type": "quiz", "quizData": [ ... ], "projectBrief": null },
+    { "name": "Module 3: Project Checkpoint", "startTime": 1800, "endTime": 1801, "type": "project", "quizData": [], "projectBrief": "Build a small web page demonstrating..." },
+    { "name": "Module 4: [Concept]", "startTime": 1801, "endTime": 2700, "type": "quiz", "quizData": [ ... ], "projectBrief": null },
+    { "name": "Module 5: Final Capstone Project", "startTime": 2700, "endTime": 2701, "type": "project", "quizData": [], "projectBrief": "Build a comprehensive application using ALL concepts, including DOM manipulation..." },
+    { "name": "Course Complete", "startTime": 2701, "endTime": 3600, "type": "complete", "quizData": [], "projectBrief": null }
+  ] 
+}
+Do not write any other text or markdown backticks.
 `;
 
 export async function POST(request) {
@@ -79,7 +77,7 @@ export async function POST(request) {
 
   let aiResponseText; // Define here for access in the catch block
 
-  try {
+   try {
   	await dbConnect();
 
   	// 1. Check cache
@@ -89,66 +87,34 @@ export async function POST(request) {
   	  return NextResponse.json(course);
   	}
 
-  	// 2. FETCH TRANSCRIPT with TIMESTAMPS (No chunking)
-  	console.log("Fetching transcript...");
-    let transcriptArray;
-    try {
-	  // Use the library to get timestamped data
-	  transcriptArray = await YoutubeTranscript.fetchTranscript(videoID);
-    } catch (transcriptError) {
-      console.error("!!! YouTubeTranscript Library Error:", transcriptError.message);
-      return NextResponse.json({ 
-        error: `Failed to fetch transcript: ${transcriptError.message}`,
-        details: "This often means the video has no captions or is private."
-      }, { status: 404 });
-    }
-
-    // 3. CRITICAL CHECK for empty transcript
-	if (!transcriptArray || transcriptArray.length === 0) {
-	  console.error("!!! Transcript is empty. Video likely has no captions.");
-  	  return NextResponse.json({ error: 'Could not fetch transcript for this video. It may have captions disabled.' }, { status: 404 });
-	}
-
-    // 4. Format transcript into ONE string
-  	const fullTranscript = transcriptArray
-  	  .map(item => {
-		const totalSeconds = Math.floor(item.offset); 
-		const minutes = Math.floor(totalSeconds / 60);
-		const seconds = totalSeconds % 60;
-        // This is the "safe" format that won't be mistaken for an image
-		return `(Time: ${minutes}m ${seconds}s) ${item.text}`;
-	  })
-  	  .join("\n");
-
-  	console.log("Transcript fetched. Length:", fullTranscript.length);
-
-  	// 5. CALL AI with the correct model
-  	console.log("Calling Gemini with transcript...");
+  	// 2. CALL AI WITH THE VIDEO FILE API
+  	console.log("Not in cache. Calling Gemini with video file...");
 
   	const response = await ai.models.generateContent({
-  	  // Use the 1M token model that can handle the full text
-  	  model: 'gemini-1.5-pro-latest',
+  	  // We use the fast 'flash' model
+  	  model: 'gemini-2.0-flash', 
   	  safetySettings: [
   		{ category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-  		{ category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
   		{ category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
   		{ category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
   	  ],
   	  contents: [
   		{
   		  parts: [
-  			{ text: "Here is the transcript:\n\n" + fullTranscript },
+            // This is the "short video" method
+  			{ fileData: { mimeType: 'video/youtube', fileUri: videoURL } },
   			{ text: coursePlannerPrompt }
   		  ]
   		}
   	  ]
   	});
 
-    // 6. Fix the regex typo from your file
+    // 3. PARSE RESPONSE
   	aiResponseText = response.text.replace(/```json|```/g, '').trim();
-    NextResponse.json()  
-	  const aiJSON = JSON.parse(aiResponseText);
-  	// 7. SAVE TO DB (CACHE)
+  	const aiJSON = JSON.parse(aiResponseText);
+
+  	// 4. SAVE TO DB (CACHE)
   	course = new Course({
   	  videoURL,
   	  videoID,
@@ -166,10 +132,11 @@ export async function POST(request) {
 	if (error.name === 'SyntaxError') {
 	  console.error("--- AI FAILED TO RETURN JSON ---");
 	  console.error("--- AI Response was: ---");
-	  console.error(aiResponseText); // Log the bad response
+	  console.error(aiResponseText);
 	  console.error("---------------------------------");
-	  return NextResponse.json({ error: 'AI returned an invalid response. The prompt may be failing.', details: aiResponseText }, { status: 500 });
+	  return NextResponse.json({ error: 'AI returned an invalid response.', details: aiResponseText }, { status: 500 });
 	}
+    // This will catch the error if the video is too long
   	return NextResponse.json(
   	  { error: `Failed: ${error.message}` },
   	  { status: 500 }

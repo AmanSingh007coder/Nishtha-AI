@@ -2,7 +2,6 @@
 
 import React, { useState, useRef, useEffect, Fragment } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
-// We need more icons for the new UI
 import { 
   BeakerIcon, 
   CodeBracketIcon, 
@@ -11,32 +10,24 @@ import {
   ArrowUturnLeftIcon
 } from '@heroicons/react/24/solid';
 
-/**
- * NEW: ModalStepper Component
- * This is a visual guide for the user during multi-stage checkpoints.
- */
+// (ModalStepper component is unchanged)
 const ModalStepper = ({ stage }) => {
   const steps = [
     { name: 'Quiz', icon: BeakerIcon, stage: 'quiz' },
     { name: 'Project', icon: CodeBracketIcon, stage: 'project' },
     { name: 'Interview', icon: ChatBubbleLeftRightIcon, stage: 'interview' }
   ];
-  // Find which step we're on (0, 1, or 2)
   const stageIndex = steps.findIndex(s => s.stage === stage);
 
   return (
     <nav className="flex items-center justify-center mb-8" aria-label="Progress">
       {steps.map((step, index) => (
-        // We use Fragment to add the connecting line
         <Fragment key={step.name}>
-          {/* Connecting Line (don't show before the first step) */}
           {index > 0 && (
             <div className={`flex-auto h-1 transition-colors ${
               index <= stageIndex ? 'bg-blue-500' : 'bg-gray-600'
             }`} />
           )}
-          
-          {/* Step Icon and Label */}
           <div className="relative flex flex-col items-center w-24">
             <div
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
@@ -65,10 +56,6 @@ const ModalStepper = ({ stage }) => {
   );
 };
 
-
-/**
- * Main CoursePlayer Component
- */
 export default function CoursePlayer({ 
   videoID, 
   modules, 
@@ -77,10 +64,9 @@ export default function CoursePlayer({
   setCurrentModuleIndex 
 }) {
   
-  const { user } = useAuth(); // Gets the hardcoded user
+  const { user } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [modalStage, setModalStage] = useState('quiz');
-  const [modalData, setModalData] = useState(null); 
   const [modalError, setModalError] = useState('');
   const [isModalLoading, setIsModalLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('AI is working...');
@@ -88,7 +74,9 @@ export default function CoursePlayer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [playerError, setPlayerError] = useState(null);
-  const [quizQuestions, setQuizQuestions] = useState([]);
+  
+  const [quizQuestions, setQuizQuestions] = useState([]); 
+  
   const [currentQuizQuestion, setCurrentQuizQuestion] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [githubRepoUrl, setGithubRepoUrl] = useState('');
@@ -104,7 +92,6 @@ export default function CoursePlayer({
       return;
     }
     const onYouTubeIframeAPIReady = () => {
-      console.log("✅ YouTube IFrame API ready!");
       if (playerInstanceRef.current) {
         try { playerInstanceRef.current.destroy(); } catch(e) {}
       }
@@ -114,26 +101,16 @@ export default function CoursePlayer({
         videoId: videoID,
         playerVars: { autoplay: 0, controls: 1, modestbranding: 1, rel: 0 },
         events: {
-          onReady: (event) => {
-            console.log('✅ Player ready!');
-            setPlayer(event.target);
-            setPlayerError(null);
-          },
+          onReady: (event) => setPlayer(event.target),
           onStateChange: (event) => {
             if (event.data === window.YT.PlayerState.PLAYING) setIsPlaying(true);
             else if (event.data === window.YT.PlayerState.PAUSED) setIsPlaying(false);
             else if (event.data === window.YT.PlayerState.ENDED) {
               setIsPlaying(false);
-              if (!showModal && !isModalLoading) {
-                  console.log(`Hit video END trigger! Opening modal.`);
-                  setShowModal(true);
-              }
+              if (!showModal && !isModalLoading) setShowModal(true);
             }
           },
-          onError: (event) => {
-            console.error('❌ YouTube player error:', event.data);
-            setPlayerError(`Player Error: ${event.data}`);
-          }
+          onError: (event) => setPlayerError(`Player Error: ${event.data}`)
         }
       });
       playerInstanceRef.current = newPlayer;
@@ -163,7 +140,6 @@ export default function CoursePlayer({
         setCurrentTime(time);
         const currentModule = modules[currentModuleIndex];
         if (time >= currentModule.endTime && !showModal && !isModalLoading) {
-          console.log(`Hit gate for ${currentModule.name}! Pausing video.`);
           player.pauseVideo();
           setShowModal(true);
         }
@@ -172,53 +148,54 @@ export default function CoursePlayer({
     return () => clearInterval(interval);
   }, [player, isPlaying, currentModuleIndex, showModal, isModalLoading, modules]);
 
-  // (useEffect for Modal open - Unchanged)
+  // (useEffect for Modal open - Correct "short video" logic)
   useEffect(() => {
     if (showModal) {
       const currentModule = modules[currentModuleIndex];
-      setIsModalLoading(false);
+      
+      // Reset all states
       setModalError('');
       setProjectReview(null);
       setVerificationQuestion('');
       setVerificationAnswer('');
       setGithubRepoUrl('');
-      setQuizQuestions(currentModule.quizData || []);
       setCurrentQuizQuestion(0);
       setSelectedAnswer(null);
-      if (currentModule.quizData && currentModule.quizData.length > 0) {
-        setModalStage('quiz'); 
-        setModalData(currentModule.quizData); 
+      setIsModalLoading(false); // Make sure we're not loading
+
+      // NO API CALL - Get data directly from props
+      const moduleQuizData = currentModule.quizData || [];
+      setQuizQuestions(moduleQuizData);
+      
+      if (moduleQuizData.length > 0) {
+        // This module has a quiz
+        setModalStage('quiz');
       } else if (currentModule.projectBrief) {
-        setModalStage('project'); 
-        setModalData({ brief: currentModule.projectBrief }); 
+        // This module has no quiz, but has a project
+        setModalStage('project');
       } else {
+        // This module has neither, just skip
         handleModalSuccess();
       }
     }
   }, [showModal, currentModuleIndex, modules]);
+  
+  // --- ALL HANDLER FUNCTIONS ARE NOW INCLUDED ---
 
-  // (handleQuizAnswer - Unchanged)
-  const handleQuizAnswer = (option) => {
-    setSelectedAnswer(option);
-  };
-
-  /**
-   * NEW: handleReplayModule Function
-   * This closes the modal and seeks the video back to the
-   * beginning of the current module.
-   */
   const handleReplayModule = () => {
     if (!player) return;
     const currentModule = modules[currentModuleIndex];
-    // Seek to the start time of the current module
     player.seekTo(currentModule.startTime, true);
     player.playVideo();
     setShowModal(false);
   };
 
-  // (handleQuizSubmit - Unchanged)
+  // THIS IS THE MISSING FUNCTION
+  const handleQuizAnswer = (option) => {
+    setSelectedAnswer(option);
+  };
+
   const handleQuizSubmit = () => {
-    const quizQuestions = modalData; 
     const currentQuestion = quizQuestions[currentQuizQuestion];
     if (selectedAnswer === currentQuestion.answer) {
       setModalError('');
@@ -228,9 +205,9 @@ export default function CoursePlayer({
       } else {
         console.log("✅ Quiz Passed!");
         const currentModule = modules[currentModuleIndex];
-        if (currentModule.projectBrief) {
+        
+        if (currentModule.projectBrief) { 
           setModalStage('project');
-          setModalData({ brief: currentModule.projectBrief });
         } else {
           handleModalSuccess(); 
         }
@@ -240,7 +217,6 @@ export default function CoursePlayer({
     }
   };
 
-  // (handleProjectSubmit - Unchanged)
   const handleProjectSubmit = async () => {
     const currentModule = modules[currentModuleIndex];
     setIsModalLoading(true);
@@ -269,10 +245,9 @@ export default function CoursePlayer({
     setIsModalLoading(false);
   };
   
-  // (handleInterviewSubmit - Unchanged)
   const handleInterviewSubmit = async () => {
     if (!user) {
-      setModalError("Auth Error: User not found. Please refresh.");
+      setModalError("You passed! Please log in (in the header) to mint your certificate and save your progress.");
       setIsModalLoading(false);
       return; 
     }
@@ -334,7 +309,6 @@ export default function CoursePlayer({
     setIsModalLoading(false);
   };
   
-  // (handleModalSuccess - Unchanged)
   const handleModalSuccess = () => {
     console.log("Module passed! Unlocking next chapter.");
     setShowModal(false);
@@ -352,7 +326,6 @@ export default function CoursePlayer({
     }
   };
 
-  // (handlePlayPause - Unchanged)
   const handlePlayPause = () => {
     if (!player) return;
     try {
@@ -363,10 +336,10 @@ export default function CoursePlayer({
     }
   };
 
-  // --- JSX Below (Fully Updated) ---
+  // --- JSX (Full, Unchanged) ---
   return (
     <div className="w-full">
-      {/* Player (Unchanged) */}
+      {/* ... (Player JSX) ... */}
       <div className="aspect-video rounded-lg overflow-hidden shadow-2xl bg-black relative">
         <div id="youtube-player-div" className="w-full h-full"></div>
         {playerError && (
@@ -393,7 +366,7 @@ export default function CoursePlayer({
         )}
       </div>
       
-      {/* Player Controls (Unchanged) */}
+      {/* ... (Controls JSX) ... */}
       <div className="mt-4 space-y-3">
         <div className="flex justify-center gap-4">
           <button
@@ -413,17 +386,16 @@ export default function CoursePlayer({
         </div>
       </div>
 
-      {/* --- The NEWLY STYLED Multi-Stage Modal --- */}
+      {/* --- The Modal --- */}
       {showModal && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80"
-          onClick={() => {}} // Prevents closing on backdrop click
+          onClick={() => {}}
         >
           <div 
             className="bg-gray-800 bg-opacity-70 backdrop-blur-lg border border-gray-700/50 w-full max-w-2xl m-4 p-8 rounded-2xl shadow-2xl"
             onClick={(e) => e.stopPropagation()} 
           >
-            {/* Modal Header */}
             <div className="mb-4 text-center">
               <h2 className="text-3xl font-bold text-white">Checkpoint!</h2>
               <p className="text-gray-300">
@@ -431,13 +403,11 @@ export default function CoursePlayer({
               </p>
             </div>
 
-            {/* NEW: Conditional Stepper */}
-            {/* This only shows if it's a multi-stage (project) module */}
-            {modules[currentModuleIndex].projectBrief && (
+            {/* Conditional Stepper */}
+            {(modules[currentModuleIndex].projectBrief) && (
               <ModalStepper stage={modalStage} />
             )}
 
-            {/* Modal Content */}
             <div className="py-4 min-h-[200px] text-gray-200">
               {isModalLoading && (
                 <div className="flex flex-col justify-center items-center h-24">
@@ -454,55 +424,47 @@ export default function CoursePlayer({
               )}
 
               {/* --- STAGE 1: QUIZ --- */}
-              {modalStage === 'quiz' && !isModalLoading && (
+              {modalStage === 'quiz' && !isModalLoading && quizQuestions.length > 0 && (
                 <div className="flex flex-col gap-4">
                   <h3 className="font-bold text-xl text-center mb-4 text-white">
                     <BeakerIcon className="w-6 h-6 inline-block mr-2 text-blue-400" />
                     Knowledge Check
                   </h3>
-                  {modalData && modalData.length > 0 ? (
-                    <>
-                      <p className="text-gray-200 text-lg text-center">
-                        Question {currentQuizQuestion + 1} of {modalData.length}:<br/>
-                        <span className="font-semibold">{modalData[currentQuizQuestion].question}</span>
-                      </p>
-                      <div className="flex flex-col gap-3 mt-4">
-                        {modalData[currentQuizQuestion].options.map((opt, i) => (
-                          <button 
-                            key={i} 
-                            onClick={() => handleQuizAnswer(opt)}
-                            className={`w-full p-4 text-left rounded-lg transition-all transform hover:scale-[1.02] ${
-                              selectedAnswer === opt 
-                                ? 'bg-blue-600 ring-2 ring-blue-400' 
-                                : 'bg-gray-700 hover:bg-gray-600'
-                            }`}
-                          >
-                            {opt}
-                          </button>
-                        ))}
-                      </div>
-                      
-                      {/* NEW: Button container with Replay button */}
-                      <div className="flex justify-between items-center pt-6 border-t border-gray-700 mt-6">
-                        <button
-                          onClick={handleReplayModule}
-                          className="px-6 py-2 bg-gray-600 text-white font-medium rounded-lg shadow-lg hover:bg-gray-700 transition-colors flex items-center"
-                        >
-                          <ArrowUturnLeftIcon className="w-5 h-5 mr-2" />
-                          Replay Chapter
-                        </button>
-                        <button
-                          onClick={handleQuizSubmit}
-                          disabled={!selectedAnswer}
-                          className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-lg hover:bg-blue-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
-                        >
-                          Submit Answer
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <p>Error: No quiz data found for this module.</p>
-                  )}
+                  <p className="text-gray-200 text-lg text-center">
+                    Question {currentQuizQuestion + 1} of {quizQuestions.length}:<br/>
+                    <span className="font-semibold">{quizQuestions[currentQuizQuestion].question}</span>
+                  </p>
+                  <div className="flex flex-col gap-3 mt-4">
+                    {quizQuestions[currentQuizQuestion].options.map((opt, i) => (
+                      <button 
+                        key={i} 
+                        onClick={() => handleQuizAnswer(opt)}
+                        className={`w-full p-4 text-left rounded-lg transition-all transform hover:scale-[1.02] ${
+                          selectedAnswer === opt 
+                            ? 'bg-blue-600 ring-2 ring-blue-400' 
+                            : 'bg-gray-700 hover:bg-gray-600'
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex justify-between items-center pt-6 border-t border-gray-700 mt-6">
+                    <button
+                      onClick={handleReplayModule}
+                      className="px-6 py-2 bg-gray-600 text-white font-medium rounded-lg shadow-lg hover:bg-gray-700 transition-colors flex items-center"
+                    >
+                      <ArrowUturnLeftIcon className="w-5 h-5 mr-2" />
+                      Replay Chapter
+                    </button>
+                    <button
+                      onClick={handleQuizSubmit}
+                      disabled={!selectedAnswer}
+                      className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-lg hover:bg-blue-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
+                    >
+                      Submit Answer
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -513,7 +475,7 @@ export default function CoursePlayer({
                     <CodeBracketIcon className="w-6 h-6 inline-block mr-2 text-blue-400" />
                     Project Submission
                   </h3>
-                  <p className="text-center text-lg">{modalData?.brief}</p>
+                  <p className="text-center text-lg">{modules[currentModuleIndex].projectBrief}</p>
                   
                   <label htmlFor="githubRepoUrl" className="block text-sm font-medium mb-1 mt-4 text-gray-300">Submit your GitHub Repo URL:</label>
                   <input

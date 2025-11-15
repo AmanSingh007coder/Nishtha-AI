@@ -42,8 +42,7 @@ async function fetchRepoContents(owner, repo, branch, path) {
   const filesToFetch = treeData.tree.filter(file => 
     file.type === 'blob' && 
     file.path.startsWith(path) && 
-    !file.path.includes('node_modules') &&
-    (file.path.endsWith('.js') || file.path.endsWith('.html') || file.path.endsWith('.css'))
+    !file.path.includes('node_modules') 
   );
 
   if (filesToFetch.length === 0) {
